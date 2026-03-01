@@ -1,8 +1,6 @@
 # TypeORM Transaction Helper
 
-## 소개
-
-TypeORM Transaction Helper는 TypeORM을 사용하여 트랜잭션을 쉽게 관리할 수 있도록 도와주는 라이브러리입니다.
+Simple and lightweight TypeORM transaction helper that simplifies transaction management with automatic rollback and resource cleanup.
 
 [![npm version](https://img.shields.io/npm/v/typeorm-transaction-helper.svg)](https://www.npmjs.com/package/typeorm-transaction-helper)
 [![npm downloads](https://img.shields.io/npm/dm/typeorm-transaction-helper.svg)](https://www.npmjs.com/package/typeorm-transaction-helper)

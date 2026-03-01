@@ -8,11 +8,7 @@ export interface TransactionOptions {
    * Isolation level for the transaction
    * @default 'READ COMMITTED'
    */
-  isolationLevel?:
-    | 'READ UNCOMMITTED'
-    | 'READ COMMITTED'
-    | 'REPEATABLE READ'
-    | 'SERIALIZABLE';
+  isolationLevel?: 'READ UNCOMMITTED' | 'READ COMMITTED' | 'REPEATABLE READ' | 'SERIALIZABLE';
 }
 
 /**

@@ -14,15 +14,15 @@
     "database",
     "queryrunner"
   ],
-  "author": "Your Name",
+  "author": "jeongjimin",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/typeorm-transaction-helper.git"
+    "url": "https://github.com/Hijiji/typeorm-transaction-helper.git"
   },
-  "homepage": "https://github.com/yourusername/typeorm-transaction-helper",
+  "homepage": "https://github.com/Hijiji/typeorm-transaction-helper",
   "bugs": {
-    "url": "https://github.com/yourusername/typeorm-transaction-helper/issues"
+    "url": "https://github.com/Hijiji/typeorm-transaction-helper/issues"
   },
   "scripts": {
     "build": "tsc",
