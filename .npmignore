@@ -1,0 +1,28 @@
+# Source files
+src/
+tests/
+*.spec.ts
+
+# Config files
+tsconfig.json
+jest.config.js
+.eslintrc.js
+.prettierrc
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Development
+coverage/
+.nyc_output/
+node_modules/
+.vscode/
+.idea/
+
+# Misc
+*.log
+.DS_Store
+.env
+.env.*
