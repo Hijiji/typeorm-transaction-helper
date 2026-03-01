@@ -1,179 +1,333 @@
 # TypeORM Transaction Helper
 
-[![npm version](https://badge.fury.io/js/%40jeongjimin%2Ftypeorm-transaction-helper.svg)](https://www.npmjs.com/package/@jeongjimin/typeorm-transaction-helper)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+## 소개
 
-Simple and safe TypeORM transaction helper using QueryRunner. Automatically handles commit, rollback, and resource cleanup.
+TypeORM Transaction Helper는 TypeORM을 사용하여 트랜잭션을 쉽게 관리할 수 있도록 도와주는 라이브러리입니다.
 
-## 🚀 Features
+[![npm version](https://img.shields.io/npm/v/typeorm-transaction-helper.svg)](https://www.npmjs.com/package/typeorm-transaction-helper)
+[![npm downloads](https://img.shields.io/npm/dm/typeorm-transaction-helper.svg)](https://www.npmjs.com/package/typeorm-transaction-helper)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-- ✅ **Simple API** - Just one function call
-- ✅ **Type Safe** - Full TypeScript support
-- ✅ **Auto Cleanup** - Automatic commit/rollback/release
-- ✅ **Zero Dependencies** - Only TypeORM as peer dependency
-- ✅ **Isolation Levels** - Support for all SQL isolation levels
-- ✅ **Error Handling** - Automatic rollback on errors
+## Features
 
-## 📦 Installation
+✨ **Simple API** - Minimal boilerplate for transaction management
+🔄 **Automatic Cleanup** - Handles connection cleanup automatically
+🛡️ **Type-Safe** - Full TypeScript support with proper types
+🔁 **Retry Support** - Built-in retry mechanism for transient failures
+⏱️ **Timeout Support** - Execute transactions with timeout limits
+📦 **Zero Dependencies** - Only requires TypeORM
+
+## Installation
 
 ```bash
-npm install @jeongjimin/typeorm-transaction-helper
-
-# or
-yarn add @jeongjimin/typeorm-transaction-helper
-
-# or
-pnpm add @jeongjimin/typeorm-transaction-helper
+npm install typeorm-transaction-helper
 ```
 
-### Requirements
+or with pnpm:
+
+```bash
+pnpm add typeorm-transaction-helper
+```
+
+or with yarn:
+
+```bash
+yarn add typeorm-transaction-helper
+```
+
+## Requirements
 
 - TypeORM >= 0.3.0
-- Node.js >= 18.0.0
+- Node.js >= 16.0.0
 
-## 🔧 Usage
+## Usage
 
-### Basic Usage
+### Basic Transaction
 
 ```typescript
 import { DataSource } from 'typeorm';
-import { runInTransaction } from '@jeongjimin/typeorm-transaction-helper';
+import { runInTransaction } from 'typeorm-transaction-helper';
 
-// Initialize your DataSource
 const dataSource = new DataSource({
-  // your configuration
+  // ... configuration
 });
-await dataSource.initialize();
 
-// Use transaction helper
-const result = await runInTransaction(dataSource, async (manager) => {
+// Execute within transaction
+const user = await runInTransaction(dataSource, async (manager) => {
   const userRepo = manager.getRepository(User);
-  const user = await userRepo.save({ name: 'John Doe' });
-  
-  const profileRepo = manager.getRepository(Profile);
-  await profileRepo.save({ userId: user.id, bio: 'Developer' });
-  
-  return user;
+  const newUser = userRepo.create({
+    name: 'John Doe',
+    email: 'john@example.com',
+  });
+  return userRepo.save(newUser);
 });
 ```
 
-### With Isolation Level
-
-```typescript
-import { runInTransactionWithOptions } from '@jeongjimin/typeorm-transaction-helper';
-
-await runInTransactionWithOptions(
-  dataSource,
-  async (manager) => {
-    // Your transactional work
-    const repo = manager.getRepository(Entity);
-    return await repo.find();
-  },
-  { isolationLevel: 'SERIALIZABLE' }
-);
-```
-
-### Error Handling
+### With Automatic Rollback
 
 ```typescript
 try {
   await runInTransaction(dataSource, async (manager) => {
-    // If any error occurs, transaction will be automatically rolled back
-    await manager.getRepository(User).save(userData);
-    throw new Error('Something went wrong');
+    const userRepo = manager.getRepository(User);
+    const user = await userRepo.save({
+      name: 'Jane',
+    });
+
+    // If error occurs here, all changes are automatically rolled back
+    throw new Error('Something went wrong!');
   });
 } catch (error) {
+  // Transaction was rolled back
   console.error('Transaction failed:', error);
-  // Transaction has been rolled back
 }
 ```
 
-## 📚 API Reference
-
-### `runInTransaction<T>(dataSource, work)`
-
-Executes work function within a transaction.
-
-**Parameters:**
-- `dataSource: DataSource` - TypeORM DataSource instance
-- `work: (manager: EntityManager) => Promise<T>` - Function to execute within transaction
-
-**Returns:** `Promise<T>` - Result of the work function
-
-**Throws:** Any error from the work function (after rollback)
-
-### `runInTransactionWithOptions<T>(dataSource, work, options)`
-
-Executes work function within a transaction with custom options.
-
-**Parameters:**
-- `dataSource: DataSource` - TypeORM DataSource instance
-- `work: (manager: EntityManager) => Promise<T>` - Function to execute within transaction
-- `options?: TransactionOptions` - Transaction options
-  - `isolationLevel?: IsolationLevel` - SQL isolation level
-
-**Isolation Levels:**
-- `READ UNCOMMITTED`
-- `READ COMMITTED`
-- `REPEATABLE READ`
-- `SERIALIZABLE`
-
-## 🤝 Why Use This?
-
-### Without Helper (❌ Verbose)
+### Multiple Operations in Transaction
 
 ```typescript
-const queryRunner = dataSource.createQueryRunner();
-await queryRunner.connect();
-await queryRunner.startTransaction();
+const result = await runInTransaction(dataSource, async (manager) => {
+  const userRepo = manager.getRepository(User);
+  const postRepo = manager.getRepository(Post);
 
-try {
-  const user = await queryRunner.manager.getRepository(User).save(userData);
-  await queryRunner.manager.getRepository(Profile).save(profileData);
-  await queryRunner.commitTransaction();
-  return user;
-} catch (error) {
-  await queryRunner.rollbackTransaction();
-  throw error;
-} finally {
-  await queryRunner.release();
-}
-```
+  // Both operations are in the same transaction
+  const user = await userRepo.save({
+    name: 'Alice',
+  });
 
-### With Helper (✅ Clean)
+  const post = await postRepo.save({
+    title: 'Hello World',
+    authorId: user.id,
+  });
 
-```typescript
-return await runInTransaction(dataSource, async (manager) => {
-  const user = await manager.getRepository(User).save(userData);
-  await manager.getRepository(Profile).save(profileData);
-  return user;
+  return { user, post };
 });
 ```
 
-## 🧪 Testing
+### With Retry Mechanism
 
-```bash
-npm test          # Run tests
-npm run test:cov  # Run tests with coverage
+Automatically retries on failure (useful for handling deadlocks):
+
+```typescript
+const user = await runInTransactionWithRetry(
+  dataSource,
+  async (manager) => {
+    const userRepo = manager.getRepository(User);
+    return userRepo.save({
+      name: 'Bob',
+    });
+  },
+  3, // max retries
+  100, // delay between retries in ms
+);
 ```
 
-## 📝 License
+### With Timeout
 
-MIT © Jeong Jimin
+```typescript
+try {
+  const user = await runInTransactionWithTimeout(
+    dataSource,
+    async (manager) => {
+      // This must complete within 5 seconds
+      const userRepo = manager.getRepository(User);
+      return userRepo.save({
+        name: 'Charlie',
+      });
+    },
+    5000, // 5 second timeout
+  );
+} catch (error) {
+  console.error('Transaction timeout:', error);
+}
+```
 
-## 🐛 Issues
+### With Transaction Options
 
-Found a bug? Please [open an issue](https://github.com/yourusername/typeorm-transaction-helper/issues).
+```typescript
+const result = await runInTransaction(
+  dataSource,
+  async (manager) => {
+    // Your transaction logic
+  },
+  {
+    isolationLevel: 'SERIALIZABLE',
+  },
+);
+```
 
-## 🤝 Contributing
+## API Reference
 
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+### `runInTransaction<T>()`
 
-## 📖 Related
+Executes a function within a transaction.
 
-- [TypeORM](https://typeorm.io/) - The ORM this library is built for
-- [TypeORM Transactions Documentation](https://typeorm.io/transactions)
+```typescript
+function runInTransaction<T>(
+  dataSource: DataSource,
+  work: (manager: EntityManager) => Promise<T>,
+  options?: TransactionOptions,
+): Promise<T>;
+```
 
----
+**Parameters:**
 
-Made with ❤️ by Jeong Jimin
+- `dataSource` - TypeORM DataSource instance
+- `work` - Async function to execute within transaction
+- `options` - Optional transaction options (isolationLevel, etc.)
+
+**Returns:** Promise resolving to the result of work function
+
+### `runInTransactionWithRetry<T>()`
+
+Executes a function with automatic retry on failure.
+
+```typescript
+function runInTransactionWithRetry<T>(
+  dataSource: DataSource,
+  work: (manager: EntityManager) => Promise<T>,
+  maxRetries?: number, // default: 3
+  delayMs?: number, // default: 100
+): Promise<T>;
+```
+
+### `runInTransactionWithTimeout<T>()`
+
+Executes a function with a timeout limit.
+
+```typescript
+function runInTransactionWithTimeout<T>(
+  dataSource: DataSource,
+  work: (manager: EntityManager) => Promise<T>,
+  timeoutMs: number,
+): Promise<T>;
+```
+
+## Examples
+
+### Real-World: User Registration
+
+```typescript
+async function registerUser(email: string, name: string, dataSource: DataSource) {
+  return runInTransactionWithRetry(
+    dataSource,
+    async (manager) => {
+      const userRepo = manager.getRepository(User);
+      const profileRepo = manager.getRepository(UserProfile);
+
+      // Check if user already exists
+      const existingUser = await userRepo.findOne({ where: { email } });
+      if (existingUser) {
+        throw new Error('User already exists');
+      }
+
+      // Create user
+      const user = await userRepo.save({
+        email,
+        createdAt: new Date(),
+      });
+
+      // Create profile
+      await profileRepo.save({
+        userId: user.id,
+        name,
+      });
+
+      return user;
+    },
+    3,
+    100,
+  );
+}
+```
+
+### Real-World: Transfer Funds
+
+```typescript
+async function transferFunds(
+  fromAccountId: number,
+  toAccountId: number,
+  amount: number,
+  dataSource: DataSource,
+) {
+  return runInTransaction(
+    dataSource,
+    async (manager) => {
+      const accountRepo = manager.getRepository(Account);
+
+      // Get both accounts for update
+      const fromAccount = await accountRepo.findOne({
+        where: { id: fromAccountId },
+      });
+      const toAccount = await accountRepo.findOne({
+        where: { id: toAccountId },
+      });
+
+      if (!fromAccount || !toAccount) {
+        throw new Error('Account not found');
+      }
+
+      if (fromAccount.balance < amount) {
+        throw new Error('Insufficient funds');
+      }
+
+      // Update both accounts
+      fromAccount.balance -= amount;
+      toAccount.balance += amount;
+
+      await accountRepo.save([fromAccount, toAccount]);
+
+      return { fromAccount, toAccount };
+    },
+    { isolationLevel: 'SERIALIZABLE' },
+  );
+}
+```
+
+## Error Handling
+
+The helper automatically rolls back transactions on any error:
+
+```typescript
+try {
+  await runInTransaction(dataSource, async (manager) => {
+    // If any error occurs here
+    throw new Error('Operation failed');
+  });
+} catch (error) {
+  // Transaction is automatically rolled back
+  // error is re-thrown here
+}
+```
+
+## Performance Tips
+
+1. **Keep transactions short** - Don't do heavy I/O operations inside transactions
+2. **Use appropriate isolation levels** - Balance consistency and performance
+3. **Handle deadlocks** - Use `runInTransactionWithRetry` for high-concurrency scenarios
+4. **Monitor transaction duration** - Use `runInTransactionWithTimeout` for long operations
+
+## Testing
+
+```bash
+npm test              # Run tests
+npm run test:watch   # Run tests in watch mode
+npm run test:cov     # Generate coverage report
+```
+
+## License
+
+MIT © 2026
+
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## Support
+
+- 📖 [Documentation](https://github.com/Hijiji/typeorm-transaction-helper)
+- 🐛 [Issue Tracker](https://github.com/Hijiji/typeorm-transaction-helper/issues)
+- 💬 [Discussions](https://github.com/Hijiji/typeorm-transaction-helper/discussions)
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
