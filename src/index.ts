@@ -143,8 +143,6 @@ export async function runInTransactionWithTimeout<T>(
   return Promise.race([runInTransaction(dataSource, work), timeoutPromise]);
 }
 
-export { Transaction, TransactionWithRetry, TransactionWithTimeout, getCurrentTransactionManager } from './decorators';
-
 export default {
   runInTransaction,
   runInTransactionWithRetry,
