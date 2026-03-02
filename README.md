@@ -40,7 +40,95 @@ yarn add typeorm-transaction-helper
 
 ## Usage
 
-### Basic Transaction
+### Decorator Approach (Simple & Clean)
+
+Use decorators for automatic transaction management in class methods:
+
+```typescript
+import { Transaction, getCurrentTransactionManager } from 'typeorm-transaction-helper';
+import { DataSource } from 'typeorm';
+
+class UserService {
+  constructor(private dataSource: DataSource) {}
+
+  @Transaction()
+  async createUser(email: string, name: string) {
+    // Automatically wrapped in a transaction
+    const manager = getCurrentTransactionManager();
+    const userRepo = manager!.getRepository(User);
+    
+    const user = await userRepo.save({
+      email,
+      name,
+      createdAt: new Date(),
+    });
+
+    // Even nested method calls use the same transaction
+    await this.sendWelcomeEmail(user);
+    
+    return user;
+  }
+
+  @Transaction()
+  async updateUserProfile(userId: number, data: any) {
+    const manager = getCurrentTransactionManager();
+    const userRepo = manager!.getRepository(User);
+    
+    const user = await userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new Error('User not found');
+    
+    Object.assign(user, data);
+    return userRepo.save(user);
+  }
+
+  async sendWelcomeEmail(user: User) {
+    // This method can be called from within a transaction
+    // It will use the same transaction context if called from @Transaction method
+    const manager = getCurrentTransactionManager();
+    if (manager) {
+      // Inside transaction
+      console.log('Saving email log in same transaction');
+    }
+  }
+}
+
+// Usage:
+const userService = new UserService(dataSource);
+const user = await userService.createUser('john@example.com', 'John Doe');
+```
+
+#### Decorator Features:
+
+- **✅ Automatic commit** - Commits on successful completion
+- **✅ Automatic rollback** - Rolls back on any error
+- **✅ Nested transaction support** - Nested calls use the same transaction
+- **✅ Clean syntax** - No extra boilerplate code
+
+#### Available Decorators:
+
+```typescript
+// Basic transaction
+@Transaction()
+async method() { }
+
+// With retry (3 retries, 100ms delay)
+@TransactionWithRetry(3, 100)
+async method() { }
+
+// With timeout (5 second limit)
+@TransactionWithTimeout(5000)
+async method() { }
+
+// With isolation level
+@Transaction({ isolationLevel: 'SERIALIZABLE' })
+async method() { }
+```
+
+### Function Approach (Flexible)
+
+For scenarios where decorators aren't suitable, use the function API directly:
+
+#### Basic Transaction
 
 ```typescript
 import { DataSource } from 'typeorm';
@@ -61,7 +149,7 @@ const user = await runInTransaction(dataSource, async (manager) => {
 });
 ```
 
-### With Automatic Rollback
+#### With Automatic Rollback
 
 ```typescript
 try {
@@ -80,7 +168,7 @@ try {
 }
 ```
 
-### Multiple Operations in Transaction
+#### Multiple Operations in Transaction
 
 ```typescript
 const result = await runInTransaction(dataSource, async (manager) => {
@@ -101,7 +189,7 @@ const result = await runInTransaction(dataSource, async (manager) => {
 });
 ```
 
-### With Retry Mechanism
+#### With Retry Mechanism
 
 Automatically retries on failure (useful for handling deadlocks):
 
@@ -119,7 +207,7 @@ const user = await runInTransactionWithRetry(
 );
 ```
 
-### With Timeout
+#### With Timeout
 
 ```typescript
 try {
@@ -139,7 +227,7 @@ try {
 }
 ```
 
-### With Transaction Options
+#### With Transaction Options
 
 ```typescript
 const result = await runInTransaction(
