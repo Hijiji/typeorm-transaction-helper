@@ -8,12 +8,35 @@ import { AsyncLocalStorage } from 'async_hooks';
  * 트랜잭션 실행 옵션
  * - isolationLevel: 트랜잭션 격리 수준을 지정합니다.
  */
+/**
+ * 트랜잭션 실행 옵션
+ */
 export interface TransactionOptions {
   /**
-   * Isolation level for the transaction
+   * 트랜잭션 격리 수준
    * @default 'READ COMMITTED'
    */
   isolationLevel?: 'READ UNCOMMITTED' | 'READ COMMITTED' | 'REPEATABLE READ' | 'SERIALIZABLE';
+
+  /**
+   * 작업 제한 시간(ms). 지정 시 내부에서 타임아웃 처리를 할 때 참고할 수 있습니다.
+   */
+  timeoutMs?: number;
+
+  /**
+   * 재시도 관련 옵션
+   */
+  retry?: {
+    attempts?: number;
+    delayMs?: number;
+    backoff?: 'linear' | 'exponential';
+    jitter?: boolean;
+  };
+
+  /**
+   * 외부 취소 신호(AbortSignal). 전달 시 신호 발생 시 트랜잭션을 롤백하고 정리합니다.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -59,36 +82,75 @@ export async function runInTransaction<T>(
   await queryRunner.startTransaction();
 
   // Run work within AsyncLocalStorage so nested calls can access the same manager
+  const signal = options?.signal;
+  let abortedBySignal = false;
+
+  const onAbort = async () => {
+    abortedBySignal = true;
+    try {
+      await queryRunner.rollbackTransaction();
+    } catch (e) {
+      console.warn('[transaction] rollback failed on abort:', e);
+    }
+    try {
+      await queryRunner.release();
+    } catch (e) {
+      console.warn('[transaction] release failed on abort:', e);
+    }
+  };
+
+  if (signal) {
+    if (signal.aborted) {
+      // If already aborted, clean up and throw
+      await queryRunner.rollbackTransaction().catch(() => {});
+      await queryRunner.release().catch(() => {});
+      throw new Error('Transaction aborted before start');
+    }
+    // Attach listener
+    signal.addEventListener('abort', onAbort);
+  }
+
   try {
     const result = await transactionStorage.run(queryRunner.manager, async () => {
       return await work(queryRunner.manager);
     });
 
+    // Commit in its own try/catch so commit errors don't mask the original result
     try {
       await queryRunner.commitTransaction();
     } catch (commitErr) {
-      // If commit fails, attempt rollback as best-effort
+      console.warn('[transaction] commit failed:', commitErr);
       try {
         await queryRunner.rollbackTransaction();
-      } catch (_) {
-        // swallow
+      } catch (rbErr) {
+        console.warn('[transaction] rollback failed after commit error:', rbErr);
       }
       throw commitErr;
     }
 
     return result;
   } catch (error) {
+    // Preserve original error; ensure rollback is attempted and any rollback error is logged
     try {
       await queryRunner.rollbackTransaction();
-    } catch (_) {
-      // swallow rollback errors to preserve original error
+    } catch (rbErr) {
+      console.warn('[transaction] rollback failed:', rbErr);
     }
     throw error;
   } finally {
+    // Remove signal listener if attached
+    if (signal) {
+      try {
+        signal.removeEventListener('abort', onAbort);
+      } catch (_) {
+        // ignore
+      }
+    }
+
     try {
       await queryRunner.release();
-    } catch (_) {
-      // ignore
+    } catch (relErr) {
+      console.warn('[transaction] release failed:', relErr);
     }
   }
 }
@@ -122,8 +184,15 @@ export async function runInTransactionWithRetry<T>(
   work: (manager: EntityManager) => Promise<T>,
   maxRetries: number = 3,
   delayMs: number = 100,
+  options?: TransactionOptions,
 ): Promise<T> {
   let lastError: Error | undefined;
+
+  // allow options.retry to override function args
+  if (options?.retry) {
+    if (typeof options.retry.attempts === 'number') maxRetries = options.retry.attempts;
+    if (typeof options.retry.delayMs === 'number') delayMs = options.retry.delayMs;
+  }
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -133,7 +202,15 @@ export async function runInTransactionWithRetry<T>(
 
       // Don't retry on last attempt
       if (attempt < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
+        // backoff strategy: linear by default
+        let wait = delayMs * attempt;
+        if (options?.retry?.backoff === 'exponential') {
+          wait = delayMs * Math.pow(2, attempt - 1);
+        }
+        if (options?.retry?.jitter) {
+          wait = Math.floor(Math.random() * wait);
+        }
+        await new Promise((resolve) => setTimeout(resolve, wait));
       }
     }
   }
