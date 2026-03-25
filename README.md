@@ -10,14 +10,14 @@ Simple and lightweight TypeORM transaction helper that simplifies transaction ma
 
 ## Features
 
-- **Simple API** - Minimal boilerplate for transaction management
-- **Automatic Cleanup** - Handles connection cleanup automatically
-- **Type-Safe** - Full TypeScript support with proper types
-- **Retry Support** - Built-in retry mechanism for transient failures
-- **Timeout Support** - Execute transactions with timeout limits
-- **Zero Dependencies** - Only requires TypeORM
+- 간단한 함수형 API: `runInTransaction` 등 명확한 함수로 트랜잭션 범위를 지정합니다.
+- 안전한 리소스 정리: 커밋/롤백/해제 단계에서 발생하는 보조 예외는 로깅만 하고 원본 예외를 보존합니다.
+- 컨텍스트 전파: `AsyncLocalStorage` 기반으로 트랜잭션 내부에서 하위 호출이 같은 `EntityManager`를 재사용할 수 있습니다.
+- 재시도 정책: 재시도 횟수, 지연, 백오프 방식, 지터 옵션을 지원합니다.
+- 타임아웃·취소 지원: 작업별 타임아웃 및 `AbortSignal`을 통한 외부 취소를 지원합니다.
+- TypeScript 친화적: 명확한 타입 정의로 안전하게 사용 가능합니다.
 
-간단 설명: 트랜잭션 실행을 단순화하고 자동 롤백, 자원 정리, 재시도 및 타임아웃 기능을 제공합니다.
+간단 설명: 반복되는 트랜잭션 boilerplate를 없애고, 운영환경에서 발생할 수 있는 자원 누수·재시도·타임아웃 문제를 안전하게 다루도록 설계되었습니다.
 
 ## Installation
 
@@ -58,7 +58,7 @@ For scenarios where decorators aren't suitable, use the function API directly:
 
 ```typescript
 import { DataSource } from 'typeorm';
-import { runInTransaction } from 'typeorm-transaction-helper';
+import { runInTransaction, getCurrentTransactionManager } from 'typeorm-transaction-helper';
 
 const dataSource = new DataSource({
   // ... configuration
@@ -74,6 +74,8 @@ const user = await runInTransaction(dataSource, async (manager) => {
   return userRepo.save(newUser);
 });
 ```
+
+설명: `runInTransaction` 내부에서 전달된 `manager`는 `getCurrentTransactionManager()`로도 접근할 수 있습니다. 같은 비동기 흐름에서 호출되는 하위 함수가 동일한 트랜잭션 매니저를 사용해야 할 때 유용합니다.
 
 #### With Automatic Rollback
 
@@ -120,16 +122,23 @@ const result = await runInTransaction(dataSource, async (manager) => {
 Automatically retries on failure (useful for handling deadlocks):
 
 ```typescript
+// 재시도 옵션을 사용하려면 options에 retry를 지정하거나, 함수 인수로 전달할 수 있습니다.
 const user = await runInTransactionWithRetry(
   dataSource,
   async (manager) => {
     const userRepo = manager.getRepository(User);
-    return userRepo.save({
-      name: 'Bob',
-    });
+    return userRepo.save({ name: 'Bob' });
   },
-  3, // max retries
-  100, // delay between retries in ms
+  3, // max retries (기본값)
+  100, // delay between retries in ms (기본값)
+  {
+    retry: {
+      attempts: 5,
+      delayMs: 200,
+      backoff: 'exponential',
+      jitter: true,
+    },
+  },
 );
 ```
 
@@ -152,6 +161,8 @@ try {
   console.error('Transaction timeout:', error);
 }
 ```
+
+설명: `runInTransactionWithTimeout`는 내부적으로 타임아웃 발생 시 `rollback`과 `release`를 시도하여 자원 누수를 방지합니다. 별도로 `options.signal`에 `AbortSignal`을 전달하면 외부에서 취소할 수 있습니다.
 
 #### With Transaction Options
 
@@ -189,6 +200,13 @@ function runInTransaction<T>(
 - `work` - Async function to execute within transaction
 - `options` - Optional transaction options (isolationLevel, etc.)
 
+`TransactionOptions` 상세:
+
+- `isolationLevel?: 'READ UNCOMMITTED' | 'READ COMMITTED' | 'REPEATABLE READ' | 'SERIALIZABLE'` — 트랜잭션 격리 수준.
+- `timeoutMs?: number` — 작업 제한 시간(ms). `runInTransaction`에서 직접 사용되지는 않지만, `runInTransactionWithTimeout` 혹은 상위 로직에서 참고할 수 있습니다.
+- `retry?: { attempts?: number; delayMs?: number; backoff?: 'linear' | 'exponential'; jitter?: boolean }` — 재시도 관련 설정.
+- `signal?: AbortSignal` — 외부 취소 신호. 전달 시 신호 발생 시 트랜잭션을 롤백하고 정리합니다.
+
 **Returns:** Promise resolving to the result of work function
 
 ### `runInTransactionWithRetry<T>()`
@@ -201,6 +219,7 @@ function runInTransactionWithRetry<T>(
   work: (manager: EntityManager) => Promise<T>,
   maxRetries?: number, // default: 3
   delayMs?: number, // default: 100
+  options?: TransactionOptions,
 ): Promise<T>;
 ```
 
