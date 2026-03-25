@@ -1,5 +1,5 @@
 {
-  "name": "typeorm-transaction-helper",
+  "name": "typeorm-transaction-helper-jiji",
   "version": "1.0.0",
   "description": "Simple and lightweight TypeORM transaction helper using QueryRunner",
   "main": "dist/index.js",
