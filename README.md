@@ -364,3 +364,11 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for gu
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 변경 이력과 릴리스 노트는 `CHANGELOG.md`에서 확인할 수 있습니다.
+
+## Expected Change
+
+- [ ] 오류로그 추가
+- [ ] GitHub Releases 설정
+- [ ] Badge 추가 (npm badge, license badge)
+- [ ] CI/CD 설정 (.github/workflows)
+- [ ] 문서 사이트 (GitHub Pages)
