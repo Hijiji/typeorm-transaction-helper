@@ -2,20 +2,26 @@
 
 Simple and lightweight TypeORM transaction helper that simplifies transaction management with automatic rollback and resource cleanup.
 
+간단하고 가벼운 TypeORM 트랜잭션 헬퍼입니다. 이 패키지는 트랜잭션 시작, 커밋, 롤백과 연결 정리를 자동으로 처리해서 트랜잭션 관련 반복 코드를 줄여줍니다. TypeORM을 쓰는 애플리케이션에서 빠르게 적용할 수 있도록 함수형 API들을 제공합니다.
+
 [![npm version](https://img.shields.io/npm/v/typeorm-transaction-helper.svg)](https://www.npmjs.com/package/typeorm-transaction-helper)
 [![npm downloads](https://img.shields.io/npm/dm/typeorm-transaction-helper.svg)](https://www.npmjs.com/package/typeorm-transaction-helper)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Features
 
-✨ **Simple API** - Minimal boilerplate for transaction management
-🔄 **Automatic Cleanup** - Handles connection cleanup automatically
-🛡️ **Type-Safe** - Full TypeScript support with proper types
-🔁 **Retry Support** - Built-in retry mechanism for transient failures
-⏱️ **Timeout Support** - Execute transactions with timeout limits
-📦 **Zero Dependencies** - Only requires TypeORM
+- **Simple API** - Minimal boilerplate for transaction management
+- **Automatic Cleanup** - Handles connection cleanup automatically
+- **Type-Safe** - Full TypeScript support with proper types
+- **Retry Support** - Built-in retry mechanism for transient failures
+- **Timeout Support** - Execute transactions with timeout limits
+- **Zero Dependencies** - Only requires TypeORM
+
+간단 설명: 트랜잭션 실행을 단순화하고 자동 롤백, 자원 정리, 재시도 및 타임아웃 기능을 제공합니다.
 
 ## Installation
+
+Node.js 16 이상 환경에서 사용하는것을 권장합니다.
 
 ```bash
 npm install typeorm-transaction-helper
@@ -35,94 +41,14 @@ yarn add typeorm-transaction-helper
 
 ## Requirements
 
+TypeORM 0.3 이상과 Node.js 16 이상을 권장합니다.
+
 - TypeORM >= 0.3.0
 - Node.js >= 16.0.0
 
 ## Usage
 
-### Decorator Approach (Simple & Clean)
-
-Use decorators for automatic transaction management in class methods:
-
-```typescript
-import { Transaction, getCurrentTransactionManager } from 'typeorm-transaction-helper';
-import { DataSource } from 'typeorm';
-
-class UserService {
-  constructor(private dataSource: DataSource) {}
-
-  @Transaction()
-  async createUser(email: string, name: string) {
-    // Automatically wrapped in a transaction
-    const manager = getCurrentTransactionManager();
-    const userRepo = manager!.getRepository(User);
-    
-    const user = await userRepo.save({
-      email,
-      name,
-      createdAt: new Date(),
-    });
-
-    // Even nested method calls use the same transaction
-    await this.sendWelcomeEmail(user);
-    
-    return user;
-  }
-
-  @Transaction()
-  async updateUserProfile(userId: number, data: any) {
-    const manager = getCurrentTransactionManager();
-    const userRepo = manager!.getRepository(User);
-    
-    const user = await userRepo.findOne({ where: { id: userId } });
-    if (!user) throw new Error('User not found');
-    
-    Object.assign(user, data);
-    return userRepo.save(user);
-  }
-
-  async sendWelcomeEmail(user: User) {
-    // This method can be called from within a transaction
-    // It will use the same transaction context if called from @Transaction method
-    const manager = getCurrentTransactionManager();
-    if (manager) {
-      // Inside transaction
-      console.log('Saving email log in same transaction');
-    }
-  }
-}
-
-// Usage:
-const userService = new UserService(dataSource);
-const user = await userService.createUser('john@example.com', 'John Doe');
-```
-
-#### Decorator Features:
-
-- **✅ Automatic commit** - Commits on successful completion
-- **✅ Automatic rollback** - Rolls back on any error
-- **✅ Nested transaction support** - Nested calls use the same transaction
-- **✅ Clean syntax** - No extra boilerplate code
-
-#### Available Decorators:
-
-```typescript
-// Basic transaction
-@Transaction()
-async method() { }
-
-// With retry (3 retries, 100ms delay)
-@TransactionWithRetry(3, 100)
-async method() { }
-
-// With timeout (5 second limit)
-@TransactionWithTimeout(5000)
-async method() { }
-
-// With isolation level
-@Transaction({ isolationLevel: 'SERIALIZABLE' })
-async method() { }
-```
+이 저장소는 함수형 API(`runInTransaction`, `runInTransactionWithRetry`, `runInTransactionWithTimeout`)를 제공합니다.
 
 ### Function Approach (Flexible)
 
@@ -243,6 +169,8 @@ const result = await runInTransaction(
 
 ## API Reference
 
+각 API 함수는 DataSource와 작업 콜백을 받아 트랜잭션 범위에서 코드를 실행합니다. 아래 시그니처를 참고하세요.
+
 ### `runInTransaction<T>()`
 
 Executes a function within a transaction.
@@ -289,6 +217,8 @@ function runInTransactionWithTimeout<T>(
 ```
 
 ## Examples
+
+실제 상황에서 트랜잭션을 어떻게 적용하는지 보여주는 간단한 예제들입니다.
 
 ### Real-World: User Registration
 
@@ -371,6 +301,8 @@ async function transferFunds(
 
 ## Error Handling
 
+설명: 트랜잭션 내에서 오류가 발생하면 자동으로 롤백되며, 호출자는 예외를 받아 추가 처리를 할 수 있습니다.
+
 The helper automatically rolls back transactions on any error:
 
 ```typescript
@@ -387,18 +319,12 @@ try {
 
 ## Performance Tips
 
+간단 팁: 트랜잭션은 가능한 짧게 유지하고, 외부 I/O는 트랜잭션 바깥에서 처리하세요. 재시도와 타임아웃 기능을 적절히 사용하면 안정성을 높일 수 있습니다.
+
 1. **Keep transactions short** - Don't do heavy I/O operations inside transactions
 2. **Use appropriate isolation levels** - Balance consistency and performance
 3. **Handle deadlocks** - Use `runInTransactionWithRetry` for high-concurrency scenarios
 4. **Monitor transaction duration** - Use `runInTransactionWithTimeout` for long operations
-
-## Testing
-
-```bash
-npm test              # Run tests
-npm run test:watch   # Run tests in watch mode
-npm run test:cov     # Generate coverage report
-```
 
 ## License
 
@@ -407,13 +333,15 @@ MIT © 2026
 ## Contributing
 
 Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+풀 리퀘스트와 이슈 템플릿을 참고해 기여해 주세요. 작은 수정도 환영합니다.
 
 ## Support
 
-- 📖 [Documentation](https://github.com/Hijiji/typeorm-transaction-helper)
-- 🐛 [Issue Tracker](https://github.com/Hijiji/typeorm-transaction-helper/issues)
-- 💬 [Discussions](https://github.com/Hijiji/typeorm-transaction-helper/discussions)
+- [Documentation](https://github.com/Hijiji/typeorm-transaction-helper) — 공식 문서 및 사용법
+- [Issue Tracker](https://github.com/Hijiji/typeorm-transaction-helper/issues) — 버그 리포트 및 요청
+- [Discussions](https://github.com/Hijiji/typeorm-transaction-helper/discussions) — 일반 토론과 질문
 
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
+변경 이력과 릴리스 노트는 `CHANGELOG.md`에서 확인할 수 있습니다.
